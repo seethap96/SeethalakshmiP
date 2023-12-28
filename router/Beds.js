@@ -11,6 +11,7 @@ const Transfer=require('../model/transfer');
 const Discharged=require('../model/discharge');
 const doctors = require('../model/Doct');
 const nus = require('../model/Nursee');
+const task = require('../model/Task')
 
 // POST to add beds to an existing ward
 router.post('/adbeds1', async (req, res) => {
@@ -183,7 +184,49 @@ router.post('/anurs', async (req, res) => {
     }
   });
 
-  //Admit Patient:
+//Add task
+  router.post('/addtask', async (req, res) => {
+    const { taskType,description } = req.body;
+  
+    try {
+      const existingtask = await task.findOne({ taskType, description });
+      if (existingtask) {
+        return res.status(400).json({ message: 'NurseId already exists' });
+      }
+  
+      const newtask = new task({taskType,description});
+      const savedtask = await newtask.save();
+  
+      res.json(savedtask);
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ message: 'Internal server Error' });
+    }
+  });
+
+router.get('/gettask',async(req,res)=>{
+
+    try{
+      const tasks = await task.find({},'-_id taskType')
+      res.json(tasks)
+    }
+    catch(error){
+      res.status(500).json({message:'Error Occuring while getting patient'})
+    }  
+  })
+
+
+  router.get('/getdescription',async(req,res)=>{
+    try{
+      const desc = await task.find({},'-_id description')
+      res.json(desc)
+    }
+    catch(error){
+      res.status(500).json({message:'Error Occuring while getting patient'})
+    }
+  })
+  
+//Admit Patient:
 // Function to generate a random alphanumeric string of a given length
 const generateRandomString = (length) => {
   const characters = 'ABCDEF1234';
