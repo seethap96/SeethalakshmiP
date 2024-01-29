@@ -3,15 +3,15 @@ const mongoose = require('mongoose');
 const nurseSchema = new mongoose.Schema({
   nurseId:{
     type:String,
-   unique:true
+    required:true
   },
-  nursename:{
+  nurseName:{
     type:String,
     require:true
   }
 });
 
-const nurse = mongoose.model('nursed', nurseSchema);
+const nurse = mongoose.model('nurse', nurseSchema);
 
 module.exports = nurse;
 
