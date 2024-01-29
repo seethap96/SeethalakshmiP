@@ -14,9 +14,15 @@ const bedSchema = new mongoose.Schema({
 
           //status: String, // "available" or "occupied"
           patientId:String,
+          patientName:String,
+          age:String,
+          gender:String,
+contactno:String,
+medicalAcuity:String,
         }]
     },
   ],
 });
 const Bed = mongoose.model('Wards', bedSchema);
 module.exports = Bed;
+
