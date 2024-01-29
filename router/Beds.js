@@ -978,3 +978,98 @@ router.put('/pro',async(req,res)=>{
   });
   
 module.exports = router;
+
+router.get('/Admit',async(req,res)=>{
+  try{
+   const Admit = await Patient.find({},'-_id')
+   
+   if(!Admit){
+    res.status(404).json({message:"Patient Not Found"})
+   }
+
+    res.status(201).json(Admit)
+  
+  }
+
+  catch(err){
+    res.status(500).json({message:'Internal server error'})
+  }
+})
+
+
+router.put('/updatept', async (req, res) => {
+  try {
+    const {
+      patientName, patientId,contactno, medicalAcuity,
+      admittingDoctors,
+    } = req.body;
+
+    // Find the patient by patientId
+    const existingPatient = await Patient.findOne({ patientId });
+
+    if (!existingPatient) {
+      return res.status(404).json({ error: 'Patient not found.' });
+    }
+
+    // Update patient information
+    existingPatient.patientName = patientName;
+    existingPatient.contactno = contactno;
+    existingPatient.medicalAcuity = medicalAcuity;
+    existingPatient.admittingDoctors = admittingDoctors;
+
+    // Save the updated patient
+    const updatedPatient = await existingPatient.save();
+
+    res.json(updatedPatient);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+
+router.delete('/deletept/:patientId', async (req, res) => {
+  try {
+    const { patientId } = req.params;
+
+    // Find the patient by patientId
+    const existingPatient = await Patient.findOne({ patientId });
+
+    if (!existingPatient) {
+      return res.status(404).json({ error: 'Patient not found.' });
+    }
+
+    // Find the bed associated with the patient
+    const bed = await Bed.findOne({
+      'wards.wardId': existingPatient.wardId,
+      'wards.beds.bedNumber': existingPatient.bedNumber
+    });
+
+    if (!bed) {
+      return res.status(500).json({ error: 'Internal server error - Bed not found for patient.' });
+    }
+
+    // Mark the bed as available
+    const selectedWard = bed.wards.find(wardItem => wardItem.wardId === existingPatient.wardId);
+    const selectedBed = selectedWard.beds.find(bedItem => bedItem.bedNumber === existingPatient.bedNumber);
+
+    if (!selectedBed) {
+      return res.status(500).json({ error: 'Internal server error - Bed not found for patient.' });
+    }
+
+    selectedBed.status = 'available';
+    selectedBed.patientId = '';
+
+    // Save changes to the bed data
+    await bed.save();
+
+    // Remove the patient from the database
+    await existingPatient.deleteOne();
+
+    res.json({ message: 'Patient deleted successfully.' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
