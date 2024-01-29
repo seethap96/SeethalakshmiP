@@ -19,7 +19,7 @@ router.use(
     origin: 'http://localhost:3000',
   })
 );
-
+//bed get:
 router.get('/bedGet', async (req, res) => {
   try {
     const availableBeds = await Bed.find();
@@ -29,6 +29,7 @@ router.get('/bedGet', async (req, res) => {
     res.status(500).json({ error: 'Internal Server Error' });
   }
 });
+//creating ward and bed
 router.post('/adbeds1', async (req, res) => {
     try {
       const { wardName, wardId, wardType, Bednumber } = req.body;
@@ -92,13 +93,6 @@ router.post('/adbeds1', async (req, res) => {
   
 
 
-
-
-
-
-
-
-
 // get admit:
 
 
@@ -111,12 +105,9 @@ router.get('/aff', async (req, res) => {
   }
 });
 
-
-//discharge of patient:1:{latest}:
-
-// Function to generate a random alphanumeric string of a given length
-const generatedischargeString = (length) => {
-  const characters = '2412';
+//admit patient:
+const generateRandomString = (length) => {
+  const characters = 'ABCDEF1234';
   let result = '';
   for (let i = 0; i < length; i++) {
     result += characters.charAt(Math.floor(Math.random() * characters.length));
@@ -125,190 +116,100 @@ const generatedischargeString = (length) => {
 };
 
 // Function to generate a unique patient ID using only a short random string
-const generatedischargeId = () => `Dsh-${generatedischargeString(4)}`; // Adjust the length as needed
+const generatePatientID = () => `PAT-${generateRandomString(4)}`; // Adjust the length as needed
 
+// Function to calculate the risk score based on medical acuity
+function calculateRiskScore(medicalAcuity) {
+  switch (medicalAcuity) {
+    case "Critical":
+      return 0.85;
+    case "Moderate":
+      return 0.65;
+    case "Stable":
+      return 0.45;
+    default:
+      return 0.1; // Default risk score for unknown or unassigned medical acuity
+  }
+}
 
-//Discharge
-router.post('/distaa', async (req, res) => {
-    try {
-      const {
-        patientId,
-        patientName,
-        medicalAcuity,age,
-        gender,admissionDate,
-        wardId,
-        bedNumber,
-        dischargeReasons,
-        dischargeDate,
-        dischargeTime
-      } = req.body;
-  
-        // Automatically generate a unique patient ID
-      const dischargeId = generatedischargeId();
-    
-  
-      // Find the bed within the ward
-      const bedData = await Bed.findOne({ 'wards.wardId': wardId });
-  
-      if (!bedData) {
-        return res.status(404).json({ error: 'Ward not found.' });
-      }
-  
-      // Find the specific bed within the ward
-      const selectedBed = bedData.wards
-        .find((w) => w.wardId === wardId)
-        .beds.find((b) => b.bedNumber === bedNumber);
-  
-      // Logging for debugging
-      console.log('Bed Data:', bedData);
-      console.log('Selected Bed:', selectedBed);
-  
-      // Check if patient is occupying the bed and is not already discharged
-      if (selectedBed && selectedBed.status === 'occupied' && selectedBed.patientId === patientId) {
-        // Check if patient is already discharged
-        const isAlreadyDischarged = await Discharged.exists({ patientId });
-  
-        if (isAlreadyDischarged) {
-          return res.status(400).json({ error: 'Patient is already discharged.' });
-        }
-  
-        // Update bed record
-        selectedBed.status = 'available';
-        selectedBed.patientId = '';
-        selectedBed.patientName = '';
-        selectedBed.age='';
-        selectedBed.contactno='';
-        selectedBed.gender='';
-        selectedBed.medicalAcuity='';
-
-  
-        // Save the updated bed record
-        await bedData.save();
-  
-        // Calculate mortality rate (example calculation, adjust as needed)
-        const totalBedsInWard = bedData.wards.reduce((total, ward) => total + ward.beds.length, 0);
-        const dischargedRecords = await Discharged.find({ 'dischargeReasons': 'died' });
-        const totalDiedCases = dischargedRecords.length;
-        const mortalityRate = (totalDiedCases / totalBedsInWard) * 100;
-
-        // Delete patient record from the patients collection
-        await Patient.deleteOne({ patientId });
-  
-        // Log the calculated mortality rate
-        console.log('Calculated Mortality Rate:', mortalityRate);
-  
-        // Create a discharged record with all the data fields
-        const discharged = new Discharged({
-          dischargeId,
-          patientName,age,
-          gender,medicalAcuity,admissionDate,
-          wardId,
-          bedNumber,
-          dischargeReasons,
-          dischargeDate,
-          dischargeTime,
-          mortalityRate,
-        });
-  
-        // Save the discharged record
-        await discharged.save();
-  
-        res.json({ message: 'Patient discharged and bed record updated successfully.', mortalityRate });
-      } else {
-        res.status(400).json({ error: 'Patient discharged.' });
-      }
-    } catch (error) {
-      console.error(error);
-      res.status(500).json({ error: 'Error discharging patient and updating bed record.' });
-    }
-  });
-
-
-
-
-  router.get('/bed1d', async (req, res) => {
-    try {
-      // Fetch all wards from the database
-      const wards = await Bed.find({}, { wards: 1 });
-  
-      // Check if no wards are found
-      if (!wards || wards.length === 0) {
-        return res.status(404).json({ message: 'No ward data found.' });
-      }
-  
-      const thisWeekStart = moment().startOf('isoWeek');
-      const thisMonthStart = moment().startOf('month');
-  
-      const bedStatusPerWard = {};
-  
-      // Iterate over each ward
-      wards.forEach(wardData => {
-        wardData.wards.forEach(ward => {
-          const wardName = ward.wardName;
-  
-          let occupiedBedsThisWeek = 0;
-          let occupiedBedsThisMonth = 0;
-  
-          ward.beds.forEach(bed => {
-            if (bed.status === 'occupied') {
-              const occupiedDate = moment(bed.occupiedTimestamp);
-              if (occupiedDate.isSameOrAfter(thisWeekStart, 'day')) {
-                occupiedBedsThisWeek++;
-              }
-              if (occupiedDate.isSameOrAfter(thisMonthStart, 'day')) {
-                occupiedBedsThisMonth++;
-              }
-            }
-          });
-  
-          const availableBeds = ward.beds.filter(bed => bed.status === 'available').length;
-  
-          bedStatusPerWard[wardName] = {
-            occupiedThisWeekBeds: occupiedBedsThisWeek,
-            occupiedThisMonthBeds: occupiedBedsThisMonth,
-            availableBeds: availableBeds,
-          };
-        });
-      });
-  
-      const admissionStatistics = {
-        thisWeek: Object.values(bedStatusPerWard).reduce((total, ward) => total + ward.occupiedThisWeekBeds, 0),
-        thisMonth: Object.values(bedStatusPerWard).reduce((total, ward) => total + ward.occupiedThisMonthBeds, 0),
-      };
-  
-      // Send the response
-      res.json({
-        bedStatusPerWard,
-        admissionStatistics,
-      });
-    } catch (error) {
-      // Handle any errors that occur during execution
-      console.error(error);
-      res.status(500).json({ error: 'Internal server error' });
-    }
-  });
-//transferGet:
-router.get('/transferGet', async (req, res) => {
+// POST endpoint to admit a patient with risk score calculation
+router.post('/admitpt', async (req, res) => {
   try {
-    const TransferBeds = await Transfer.find();
-    res.json(TransferBeds);
+    const {
+      patientName, age, gender, contactno, wardId, wardName, bedNumber, medicalAcuity,
+      admittingDoctors, admissionDate, admissionTime, assignedNurse, tasks,
+      address, abhaNo,
+    } = req.body;
+
+    // Automatically generate a unique patient ID
+    const patientId = generatePatientID();
+
+    // Ensure admissionDate is today or in the future
+    const now = new Date();
+    const selectedDate = new Date(admissionDate);
+
+    // Compare only the date part
+    now.setHours(0, 0, 0, 0);
+    selectedDate.setHours(0, 0, 0, 0);
+
+    if (selectedDate < now) {
+      return res.status(400).json({ error: 'Admission date must be today or a future date.' });
+    }
+
+    // Calculate risk score based on medical acuity
+    const riskScore = calculateRiskScore(medicalAcuity);
+
+    // Create a new Patient document with riskScore
+    const newPatient = new Patient({
+      patientName, age, gender, contactno, wardId, patientId, wardName, bedNumber,
+      medicalAcuity, admittingDoctors, admissionDate, admissionTime,
+      assignedNurse, abhaNo, address, tasks, riskScore,
+    });
+//Constructs a new Patient object with all the required information, including the risk score.
+//Checks ward and bed existence: Verifies if the specified ward and bed exist in the database using Bed.findOne().
+//Checks bed availability: Ensures the bed is not already occupied
+    // Check if the specified ward and bed exist
+    const bed = await Bed.findOne({
+      'wards.wardId': wardId,
+      'wards.beds.bedNumber': bedNumber
+    });
+//Queries the database to find the specified ward and bed.
+
+    if (!bed) {
+      return res.status(400).json({ error: 'Ward or bed does not exist.' });
+    }
+
+    // Check if the bed is available orChecks if the specified ward and bed exist.
+
+    const selectedBed = bed.wards.find(wardItem => wardItem.wardId === wardId).beds.find(bedItem => bedItem.bedNumber === bedNumber);
+    //Finds the selected bed within the specified ward.
+
+    if (selectedBed.status === 'occupied') {
+      return res.status(400).json({ error: 'Selected bed is already occupied.' });
+    }
+
+    // Save the patient or Persists the new patient document to the database using newPatient.save().
+ 
+        const savedPatient = await newPatient.save();
+
+    // Mark the bed as occupied in the bed collection
+    selectedBed.status = 'occupied';
+    selectedBed.patientId = patientId;
+    selectedBed.patientName=patientName;
+    selectedBed.age=age;
+    selectedBed.gender=gender;
+    selectedBed.contactno=contactno;
+    selectedBed.medicalAcuity=medicalAcuity;
+
+    // Save changes to the bed data
+    await bed.save();
+
+    res.status(201).json(savedPatient);
   } catch (error) {
-    res.json(error);
+    console.error(error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
-//get discharge method:
-router.get('/Disget',async(req,res)=>{
-  try{
-    const h1 = await Discharged.find()
-    res.json(h1)
-    console.log(h1);
-  }
-  catch(error){
-      res.json(error)
-  }
-})
-
-
 
 
 
@@ -439,9 +340,21 @@ router.post('/tpsss', async (req, res) => {
   }
 });
 
+//transferGet:
+router.get('/transferGet', async (req, res) => {
+  try {
+    const TransferBeds = await Transfer.find();
+    res.json(TransferBeds);
+  } catch (error) {
+    res.json(error);
+  }
+});
 
-const generateRandomString = (length) => {
-  const characters = 'ABCDEF1234';
+//discharge of patient:1:{latest}:
+
+// Function to generate a random alphanumeric string of a given length
+const generatedischargeString = (length) => {
+  const characters = '2412';
   let result = '';
   for (let i = 0; i < length; i++) {
     result += characters.charAt(Math.floor(Math.random() * characters.length));
@@ -450,107 +363,179 @@ const generateRandomString = (length) => {
 };
 
 // Function to generate a unique patient ID using only a short random string
-const generatePatientID = () => `PAT-${generateRandomString(4)}`; // Adjust the length as needed
+const generatedischargeId = () => `Dsh-${generatedischargeString(4)}`; // Adjust the length as needed
 
-// Function to calculate the risk score based on medical acuity
-function calculateRiskScore(medicalAcuity) {
-  switch (medicalAcuity) {
-    case "Critical":
-      return 0.85;
-    case "Moderate":
-      return 0.65;
-    case "Stable":
-      return 0.45;
-    default:
-      return 0.1; // Default risk score for unknown or unassigned medical acuity
+
+//Discharge
+router.post('/distaa', async (req, res) => {
+    try {
+      const {
+        patientId,
+        patientName,
+        medicalAcuity,age,
+        gender,admissionDate,
+        wardId,
+        bedNumber,
+        dischargeReasons,
+        dischargeDate,
+        dischargeTime
+      } = req.body;
+  
+        // Automatically generate a unique patient ID
+      const dischargeId = generatedischargeId();
+    
+  
+      // Find the bed within the ward
+      const bedData = await Bed.findOne({ 'wards.wardId': wardId });
+  
+      if (!bedData) {
+        return res.status(404).json({ error: 'Ward not found.' });
+      }
+  
+      // Find the specific bed within the ward
+      const selectedBed = bedData.wards
+        .find((w) => w.wardId === wardId)
+        .beds.find((b) => b.bedNumber === bedNumber);
+  
+      // Logging for debugging
+      console.log('Bed Data:', bedData);
+      console.log('Selected Bed:', selectedBed);
+  
+      // Check if patient is occupying the bed and is not already discharged
+      if (selectedBed && selectedBed.status === 'occupied' && selectedBed.patientId === patientId) {
+        // Check if patient is already discharged
+        const isAlreadyDischarged = await Discharged.exists({ patientId });
+  
+        if (isAlreadyDischarged) {
+          return res.status(400).json({ error: 'Patient is already discharged.' });
+        }
+  
+        // Update bed record
+        selectedBed.status = 'available';
+        selectedBed.patientId = '';
+        selectedBed.patientName = '';
+        selectedBed.age='';
+        selectedBed.contactno='';
+        selectedBed.gender='';
+        selectedBed.medicalAcuity='';
+
+  
+        // Save the updated bed record
+        await bedData.save();
+  
+        // Calculate mortality rate (example calculation, adjust as needed)
+        const totalBedsInWard = bedData.wards.reduce((total, ward) => total + ward.beds.length, 0);
+        const dischargedRecords = await Discharged.find({ 'dischargeReasons': 'died' });
+        const totalDiedCases = dischargedRecords.length;
+        const mortalityRate = (totalDiedCases / totalBedsInWard) * 100;
+
+        // Delete patient record from the patients collection
+        await Patient.deleteOne({ patientId });
+  
+        // Log the calculated mortality rate
+        console.log('Calculated Mortality Rate:', mortalityRate);
+  
+        // Create a discharged record with all the data fields
+        const discharged = new Discharged({
+          dischargeId,
+          patientName,age,
+          gender,medicalAcuity,admissionDate,
+          wardId,
+          bedNumber,
+          dischargeReasons,
+          dischargeDate,
+          dischargeTime,
+          mortalityRate,
+        });
+  
+        // Save the discharged record
+        await discharged.save();
+  
+        res.json({ message: 'Patient discharged and bed record updated successfully.', mortalityRate });
+      } else {
+        res.status(400).json({ error: 'Patient discharged.' });
+      }
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ error: 'Error discharging patient and updating bed record.' });
+    }
+  });
+
+////get discharge method:
+router.get('/Disget',async(req,res)=>{
+  try{
+    const h1 = await Discharged.find()
+    res.json(h1)
+    console.log(h1);
   }
-}
-
-// POST endpoint to admit a patient with risk score calculation
-router.post('/admitpt', async (req, res) => {
-  try {
-    const {
-      patientName, age, gender, contactno, wardId, wardName, bedNumber, medicalAcuity,
-      admittingDoctors, admissionDate, admissionTime, assignedNurse, tasks,
-      address, abhaNo,
-    } = req.body;
-
-    // Automatically generate a unique patient ID
-    const patientId = generatePatientID();
-
-    // Ensure admissionDate is today or in the future
-    const now = new Date();
-    const selectedDate = new Date(admissionDate);
-
-    // Compare only the date part
-    now.setHours(0, 0, 0, 0);
-    selectedDate.setHours(0, 0, 0, 0);
-
-    if (selectedDate < now) {
-      return res.status(400).json({ error: 'Admission date must be today or a future date.' });
-    }
-
-    // Calculate risk score based on medical acuity
-    const riskScore = calculateRiskScore(medicalAcuity);
-
-    // Create a new Patient document with riskScore
-    const newPatient = new Patient({
-      patientName, age, gender, contactno, wardId, patientId, wardName, bedNumber,
-      medicalAcuity, admittingDoctors, admissionDate, admissionTime,
-      assignedNurse, abhaNo, address, tasks, riskScore,
-    });
-//Constructs a new Patient object with all the required information, including the risk score.
-//Checks ward and bed existence: Verifies if the specified ward and bed exist in the database using Bed.findOne().
-//Checks bed availability: Ensures the bed is not already occupied
-    // Check if the specified ward and bed exist
-    const bed = await Bed.findOne({
-      'wards.wardId': wardId,
-      'wards.beds.bedNumber': bedNumber
-    });
-//Queries the database to find the specified ward and bed.
-
-    if (!bed) {
-      return res.status(400).json({ error: 'Ward or bed does not exist.' });
-    }
-
-    // Check if the bed is available orChecks if the specified ward and bed exist.
-
-    const selectedBed = bed.wards.find(wardItem => wardItem.wardId === wardId).beds.find(bedItem => bedItem.bedNumber === bedNumber);
-    //Finds the selected bed within the specified ward.
-
-    if (selectedBed.status === 'occupied') {
-      return res.status(400).json({ error: 'Selected bed is already occupied.' });
-    }
-
-    // Save the patient or Persists the new patient document to the database using newPatient.save().
- 
-        const savedPatient = await newPatient.save();
-
-    // Mark the bed as occupied in the bed collection
-    selectedBed.status = 'occupied';
-    selectedBed.patientId = patientId;
-    selectedBed.patientName=patientName;
-    selectedBed.age=age;
-    selectedBed.gender=gender;
-    selectedBed.contactno=contactno;
-    selectedBed.medicalAcuity=medicalAcuity;
-
-    // Save changes to the bed data
-    await bed.save();
-
-    res.status(201).json(savedPatient);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+  catch(error){
+      res.json(error)
   }
-});
+})
 
 
-
-
-
-
-
+//Dashboard1:
+  router.get('/bed1d', async (req, res) => {
+    try {
+      // Fetch all wards from the database
+      const wards = await Bed.find({}, { wards: 1 });
+  
+      // Check if no wards are found
+      if (!wards || wards.length === 0) {
+        return res.status(404).json({ message: 'No ward data found.' });
+      }
+  
+      const thisWeekStart = moment().startOf('isoWeek');
+      const thisMonthStart = moment().startOf('month');
+  
+      const bedStatusPerWard = {};
+  
+      // Iterate over each ward
+      wards.forEach(wardData => {
+        wardData.wards.forEach(ward => {
+          const wardName = ward.wardName;
+  
+          let occupiedBedsThisWeek = 0;
+          let occupiedBedsThisMonth = 0;
+  
+          ward.beds.forEach(bed => {
+            if (bed.status === 'occupied') {
+              const occupiedDate = moment(bed.occupiedTimestamp);
+              if (occupiedDate.isSameOrAfter(thisWeekStart, 'day')) {
+                occupiedBedsThisWeek++;
+              }
+              if (occupiedDate.isSameOrAfter(thisMonthStart, 'day')) {
+                occupiedBedsThisMonth++;
+              }
+            }
+          });
+  
+          const availableBeds = ward.beds.filter(bed => bed.status === 'available').length;
+  
+          bedStatusPerWard[wardName] = {
+            occupiedThisWeekBeds: occupiedBedsThisWeek,
+            occupiedThisMonthBeds: occupiedBedsThisMonth,
+            availableBeds: availableBeds,
+          };
+        });
+      });
+  
+      const admissionStatistics = {
+        thisWeek: Object.values(bedStatusPerWard).reduce((total, ward) => total + ward.occupiedThisWeekBeds, 0),
+        thisMonth: Object.values(bedStatusPerWard).reduce((total, ward) => total + ward.occupiedThisMonthBeds, 0),
+      };
+  
+      // Send the response
+      res.json({
+        bedStatusPerWard,
+        admissionStatistics,
+      });
+    } catch (error) {
+      // Handle any errors that occur during execution
+      console.error(error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
 
 
 
@@ -597,7 +582,7 @@ router.get('/paaaG', async (req, res) => {
   }
   });
   
-  dashboarf7:
+  //dashboarf7:
   
   
   
@@ -628,7 +613,7 @@ router.get('/paaaG', async (req, res) => {
   });
   
   
-  
+  //Dashboard12:
   
   router.get('/pace', async (req, res) => {
     try {
@@ -657,6 +642,7 @@ router.get('/paaaG', async (req, res) => {
       res.status(500).json({ error: 'Internal server error' });
     }
   });
+//Dashboard3:
   router.get('/availablebeddds', async (req, res) => {
     try {
       const availableWards = await Bed.find({ 'wards.beds.status': 'available' });
@@ -682,6 +668,7 @@ router.get('/paaaG', async (req, res) => {
       res.status(500).json({ error: 'Internal server error' });
     }
   });
+//dashboard2
   router.get('/wardoccupancys', async (req, res) => {
     try {
       const occupiedWards = await Bed.find({ 'wards.beds.status': 'occupied' });
@@ -828,7 +815,7 @@ function formatDate(dateString) {
 }
 
 
-
+//Dashboard10
 
 
   router.get('/patientflow', async (req, res) => {
